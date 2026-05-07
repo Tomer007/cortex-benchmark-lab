@@ -10,22 +10,14 @@ import {
   XCircle, 
   ChevronDown, 
   ChevronUp,
-  ChevronRight, 
-  Activity, 
+  ChevronRight,
+  Activity,
   AlertCircle,
   Code2,
   Terminal,
   RefreshCcw,
-  Settings2,
-  Cpu,
-  Layers,
-  Gauge,
-  HardDrive,
-  Network,
   Command,
-  Monitor,
   Box,
-  Braces,
   FlaskConical,
   Copy,
   Maximize2,
@@ -95,20 +87,27 @@ export default function App() {
   const [logs, setLogs] = useState<string[]>([]);
   const [systemState, setSystemState] = useState<{ anthropic: boolean; openai: boolean } | null>(null);
   const [showEditor, setShowEditor] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(false);
   const [editorTab, setEditorTab] = useState<"context" | "prompts" | "keys">("context");
   const [maximizedResult, setMaximizedResult] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [anthropicKey, setAnthropicKey] = useState(localStorage.getItem('bench_anthropic_key') || "");
   const [openaiKey, setOpenaiKey] = useState(localStorage.getItem('bench_openai_key') || "");
   const [showGuidelines, setShowGuidelines] = useState(false);
-  const [showNodeMon, setShowNodeMon] = useState(false);
-  const [showSystemLog, setShowSystemLog] = useState(false);
   const [viewingPrompt, setViewingPrompt] = useState<Record<string, boolean>>({});
   const [expandedPrompt, setExpandedPrompt] = useState<Record<string, boolean>>({});
   const [pinnedPromptKey, setPinnedPromptKey] = useState<string | null>(null);
   const [maximizedPromptContent, setMaximizedPromptContent] = useState<{ title: string, content: string } | null>(null);
   const [guideLang, setGuideLang] = useState<"en" | "he">("en");
+  const [freeTestPrompt, setFreeTestPrompt] = useState("You are a sarcastic pirate captain who gives life advice. Every response must include at least one nautical metaphor and end with 'Arrr!' You speak in a mix of old English and modern slang.");
+  const [freeTestContext, setFreeTestContext] = useState("I just got rejected from my dream job. What should I do next?");
+  const [freeTestModel, setFreeTestModel] = useState("gpt-4o");
+  const [freeTestResult, setFreeTestResult] = useState<{ output: string; usage: any; model: string; duration: number } | null>(null);
+  const [freeTestRunning, setFreeTestRunning] = useState(false);
+  const [freeTestError, setFreeTestError] = useState<string | null>(null);
+  const [showFreeTest, setShowFreeTest] = useState(false);
+  const [freeTestMainResult, setFreeTestMainResult] = useState<{ output: string; usage: any; model: string; duration: number } | null>(null);
+  const [freeTestViewTab, setFreeTestViewTab] = useState<"output" | "prompt">("output");
+  const [freeTestPromptExpanded, setFreeTestPromptExpanded] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(
     (localStorage.getItem('bench_theme') as "dark" | "light") || "dark"
   );
@@ -341,6 +340,43 @@ export default function App() {
     }
   };
 
+  const runFreeTest = async () => {
+    if (!freeTestPrompt.trim()) return;
+    setFreeTestRunning(true);
+    setFreeTestError(null);
+    setFreeTestResult(null);
+    setFreeTestMainResult(null);
+    addLog(`Prompt test: ${freeTestModel}`);
+
+    try {
+      const response = await fetch("/api/free-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: freeTestPrompt,
+          context: freeTestContext || undefined,
+          model: freeTestModel,
+          anthropicKey,
+          openaiKey
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Prompt test failed");
+      }
+
+      setFreeTestResult(data);
+      setFreeTestMainResult(data);
+      addLog(`Prompt test completed in ${data.duration}ms`);
+    } catch (err: any) {
+      setFreeTestError(err.message);
+      addLog(`Prompt test error: ${err.message}`);
+    } finally {
+      setFreeTestRunning(false);
+    }
+  };
+
   const stats = useMemo(() => {
     if (!results) return { total: 0, passed: 0, failed: 0, totalCost: 0, totalTokens: 0 };
     return {
@@ -365,14 +401,18 @@ export default function App() {
 
       {/* Engineering Header */}
       <header className={`border-b ${theme === 'dark' ? 'border-zinc-800 bg-zinc-900/80' : 'border-slate-200 bg-white/80'} backdrop-blur-xl sticky top-0 z-[100] h-14 flex-shrink-0`}>
-        <div className="max-w-[1600px] mx-auto px-4 h-full flex items-center justify-between gap-8 w-full">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3 pr-6 border-r border-zinc-800">
+        <div className="max-w-[1600px] mx-auto px-4 h-full flex items-center justify-between w-full">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <div className={`w-8 h-8 ${theme === 'dark' ? 'bg-zinc-800 border-zinc-700' : 'bg-indigo-50 border-indigo-100'} rounded flex items-center justify-center`}>
                 <Box className="text-indigo-500 w-5 h-5" />
               </div>
-              <h1 className={`font-bold text-sm uppercase tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                Prompt.Bench <span className="text-zinc-600 ml-1">v2.0.4 r.31</span>
+              <h1 
+                onClick={() => setShowGuidelines(true)}
+                title="User guide"
+                className={`font-bold text-sm uppercase tracking-tighter cursor-pointer hover:opacity-80 transition-opacity ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}
+              >
+                Prompt.Bench <span className={`ml-1 ${theme === 'dark' ? 'text-zinc-600' : 'text-slate-400'}`}>v2.0.4</span>
               </h1>
             </div>
             
@@ -386,59 +426,34 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-3">
-            {/* API Key Quick Input */}
-            <div className={`flex items-center border rounded-lg overflow-hidden transition-all ${
-              theme === 'dark' ? 'bg-zinc-950 border-zinc-800' : 'bg-slate-50 border-slate-200'
-            }`}>
-              <div className="px-2 py-1 bg-indigo-500/10 border-r border-inherit">
-                <Key className="w-3 h-3 text-indigo-500" />
-              </div>
-              <input 
-                type="password"
-                placeholder={model.startsWith('claude') ? "Anthropic Key..." : "OpenAI Key..."}
-                value={model.startsWith('claude') ? anthropicKey : openaiKey}
-                onChange={(e) => {
-                  if (model.startsWith('claude')) {
-                    saveKeys(e.target.value, openaiKey);
-                  } else {
-                    saveKeys(anthropicKey, e.target.value);
-                  }
-                }}
-                className={`w-24 px-2 py-1 text-[10px] bg-transparent focus:outline-none focus:w-40 transition-all ${
-                  theme === 'dark' ? 'text-zinc-300 placeholder:text-zinc-700' : 'text-slate-700 placeholder:text-slate-300'
-                }`}
-              />
-            </div>
-
-            <div className="relative">
-              <Settings2 className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${theme === 'dark' ? 'text-zinc-500' : 'text-slate-400'}`} />
-              <select 
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className={`border rounded px-8 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 appearance-none cursor-pointer ${
-                  theme === 'dark' 
-                    ? 'bg-zinc-900 border-zinc-800 text-zinc-300' 
-                    : 'bg-white border-slate-200 text-slate-700'
-                }`}
-                disabled={isRunning}
-              >
-                <optgroup label="Anthropic">
-                  <option value="claude-3-5-sonnet-20240620">claude-3-5-sonnet (Old)</option>
-                  <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet (New)</option>
-                  <option value="claude-3-haiku-20240307">claude-3-haiku</option>
-                </optgroup>
-                <optgroup label="OpenAI">
-                  <option value="gpt-4o-mini">gpt-4o-mini</option>
-                  <option value="gpt-4o">gpt-4o</option>
-                  <option value="o1-preview">o1-preview</option>
-                  <option value="o1-mini">o1-mini</option>
-                </optgroup>
-              </select>
-            </div>
+            <select 
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              title="Select model"
+              className={`border rounded px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 appearance-none cursor-pointer ${
+                theme === 'dark' 
+                  ? 'bg-zinc-900 border-zinc-800 text-zinc-300' 
+                  : 'bg-white border-slate-200 text-slate-700'
+              }`}
+              disabled={isRunning}
+            >
+              <optgroup label="Anthropic">
+                <option value="claude-3-5-sonnet-20240620">claude-3-5-sonnet (Old)</option>
+                <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet (New)</option>
+                <option value="claude-3-haiku-20240307">claude-3-haiku</option>
+              </optgroup>
+              <optgroup label="OpenAI">
+                <option value="gpt-4o-mini">gpt-4o-mini</option>
+                <option value="gpt-4o">gpt-4o</option>
+                <option value="o1-preview">o1-preview</option>
+                <option value="o1-mini">o1-mini</option>
+              </optgroup>
+            </select>
             
             <button
               onClick={() => runTests()}
               disabled={isRunning}
+              title="Run all tests"
               className={`
                 flex items-center gap-2 px-4 py-1.5 rounded text-xs font-bold uppercase tracking-widest transition-all
                 ${isRunning 
@@ -448,192 +463,14 @@ export default function App() {
               `}
             >
               {isRunning ? <RefreshCcw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-              {isRunning ? "Running..." : "Master Execute"}
+              {isRunning ? "Running..." : "Run All"}
             </button>
           </div>
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar Toggle */}
-        <button
-          onClick={() => setShowSidebar(!showSidebar)}
-          className={`flex-shrink-0 flex items-center justify-center w-6 border-r transition-colors ${
-            theme === 'dark' 
-              ? 'border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-600 hover:text-zinc-300' 
-              : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600'
-          }`}
-          title={showSidebar ? "Hide sidebar" : "Show sidebar"}
-        >
-          <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${showSidebar ? 'rotate-180' : ''}`} />
-        </button>
-
-        {/* Sidebar Controls */}
-        <AnimatePresence>
-          {showSidebar && (
-            <motion.aside
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 288, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className={`border-r ${theme === 'dark' ? 'border-zinc-800 bg-zinc-900/30' : 'border-slate-200 bg-white/50'} flex flex-col font-mono flex-shrink-0 overflow-hidden`}
-            >
-          <div className="flex-1 overflow-y-auto scrollbar-hide">
-            {/* Accordion: Node Monitoring */}
-            <div className={`border-b ${theme === 'dark' ? 'border-zinc-900' : 'border-slate-200'}`}>
-              <button 
-                onClick={() => setShowNodeMon(showNodeMon ? false : (setShowSystemLog(false), true))}
-                className={`w-full px-5 py-3.5 flex items-center justify-between group transition-colors ${
-                  showNodeMon 
-                    ? (theme === 'dark' ? 'bg-zinc-900/50' : 'bg-slate-50') 
-                    : (theme === 'dark' ? 'hover:bg-zinc-900/30' : 'hover:bg-slate-50/50')
-                }`}
-              >
-                <div className={`text-[10px] uppercase tracking-[0.15em] font-bold flex items-center gap-2.5 ${
-                  showNodeMon ? (theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600') : 'text-zinc-500'
-                }`}>
-                  <Activity className="w-3.5 h-3.5" /> Node Monitoring
-                </div>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                  showNodeMon ? 'rotate-0' : '-rotate-90'
-                } ${theme === 'dark' ? 'text-zinc-600 group-hover:text-zinc-400' : 'text-slate-400 group-hover:text-slate-600'}`} />
-              </button>
-              
-              <AnimatePresence>
-                {showNodeMon && (
-                  <motion.div 
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2, ease: "easeOut" }}
-                    className="overflow-hidden"
-                  >
-                    <div className={`px-5 pb-5 pt-1 space-y-3.5 ${theme === 'dark' ? 'bg-zinc-900/20' : 'bg-slate-50/50'}`}>
-                      <div className={`flex justify-between items-center text-[10px] p-2.5 rounded-lg ${theme === 'dark' ? 'bg-zinc-900/50' : 'bg-white border border-slate-100'}`}>
-                        <span className="flex items-center gap-2 text-zinc-500"><Gauge className="w-3 h-3" /> Latency</span>
-                        <span className={`font-bold ${theme === 'dark' ? 'text-zinc-300' : 'text-slate-600'}`}>
-                          {metadata?.duration && results ? `${Math.round(metadata.duration / results.length)}ms/u` : "---"}
-                        </span>
-                      </div>
-                      <div className={`flex justify-between items-center text-[10px] p-2.5 rounded-lg ${theme === 'dark' ? 'bg-zinc-900/50' : 'bg-white border border-slate-100'}`}>
-                        <span className="flex items-center gap-2 text-zinc-500"><HardDrive className="w-3 h-3" /> Cache</span>
-                        <span className="text-green-500 font-bold">L3 Enabled</span>
-                      </div>
-                      <div className={`flex justify-between items-center text-[10px] p-2.5 rounded-lg ${theme === 'dark' ? 'bg-zinc-900/50' : 'bg-white border border-slate-100'}`}>
-                        <span className="flex items-center gap-2 text-zinc-500"><Layers className="w-3 h-3" /> Parallel</span>
-                        <span className={`font-bold ${theme === 'dark' ? 'text-zinc-300' : 'text-slate-600'}`}>8 Threads</span>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Accordion: System Log */}
-            <div className={`border-b ${theme === 'dark' ? 'border-zinc-900' : 'border-slate-200'}`}>
-              <button 
-                onClick={() => setShowSystemLog(showSystemLog ? false : (setShowNodeMon(false), true))}
-                className={`w-full px-5 py-3.5 flex items-center justify-between group transition-colors ${
-                  showSystemLog 
-                    ? (theme === 'dark' ? 'bg-zinc-900/50' : 'bg-slate-50') 
-                    : (theme === 'dark' ? 'hover:bg-zinc-900/30' : 'hover:bg-slate-50/50')
-                }`}
-              >
-                <div className={`text-[10px] uppercase tracking-[0.15em] font-bold flex items-center gap-2.5 ${
-                  showSystemLog ? (theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600') : 'text-zinc-500'
-                }`}>
-                  <Terminal className="w-3.5 h-3.5" /> System Log
-                </div>
-                <div className="flex items-center gap-2">
-                  {logs.length > 0 && (
-                    <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold ${
-                      theme === 'dark' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600'
-                    }`}>{logs.length}</span>
-                  )}
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                    showSystemLog ? 'rotate-0' : '-rotate-90'
-                  } ${theme === 'dark' ? 'text-zinc-600 group-hover:text-zinc-400' : 'text-slate-400 group-hover:text-slate-600'}`} />
-                </div>
-              </button>
-
-              <AnimatePresence>
-                {showSystemLog && (
-                  <motion.div 
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2, ease: "easeOut" }}
-                    className="overflow-hidden"
-                  >
-                    <div className={`px-5 pb-5 pt-1 space-y-3 ${theme === 'dark' ? 'bg-zinc-900/20' : 'bg-slate-50/50'}`}>
-                      <div className="flex items-center justify-between">
-                        <div className={`text-[9px] uppercase font-mono tracking-tighter ${theme === 'dark' ? 'text-zinc-600' : 'text-slate-400'}`}>Live Stream</div>
-                        {logs.length > 0 && (
-                          <button 
-                            onClick={() => {
-                              navigator.clipboard.writeText(logs.join('\n'));
-                              addLog("Logs copied to clipboard.");
-                            }}
-                            className={`p-1.5 rounded transition-colors ${theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-600 hover:text-zinc-400' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-600'}`}
-                            title="Copy logs"
-                          >
-                            <Copy className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                      <div className={`space-y-1 font-mono text-[9px] p-3 rounded-lg max-h-48 overflow-y-auto custom-scrollbar-mini ${
-                        theme === 'dark' ? 'bg-black/40 border border-zinc-800/50' : 'bg-white border border-slate-100'
-                      }`}>
-                        {logs.map((log, i) => (
-                          <div key={i} className={`${theme === 'dark' ? 'text-zinc-500' : 'text-slate-400'} truncate`}>
-                            <span className={`${theme === 'dark' ? 'text-zinc-700' : 'text-slate-300'}`}>{log.split(']')[0]}]</span>
-                            <span className={`${theme === 'dark' ? 'text-zinc-400' : 'text-slate-500'}`}>{log.split(']')[1]}</span>
-                          </div>
-                        ))}
-                        {logs.length === 0 && <div className={`${theme === 'dark' ? 'text-zinc-800' : 'text-slate-200'} italic`}>Waiting for events...</div>}
-                      </div>
-                      {logs.length > 0 && (
-                        <button 
-                          onClick={() => setLogs([])}
-                          className={`text-[9px] uppercase font-bold flex items-center gap-1.5 transition-colors ${
-                            theme === 'dark' ? 'text-zinc-700 hover:text-red-400' : 'text-slate-300 hover:text-red-500'
-                          }`}
-                        >
-                          <RefreshCcw className="w-2.5 h-2.5" /> Clear
-                        </button>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-
-          <div className={`p-5 border-t ${theme === 'dark' ? 'border-zinc-900 bg-black/20' : 'border-slate-200 bg-slate-50'}`}>
-            {results && (
-              <button 
-                onClick={() => {
-                  setResults(null);
-                  setMetadata(null);
-                  setError(null);
-                  setSelectedFilter(null);
-                  addLog("Workspace purged.");
-                }}
-                className={`w-full flex items-center justify-center gap-2 py-2.5 border rounded-lg transition-all text-[10px] font-bold ${
-                  theme === 'dark'
-                    ? 'border-zinc-800 hover:border-red-900/50 hover:bg-red-500/5 text-zinc-600 hover:text-red-400'
-                    : 'border-slate-200 hover:border-red-200 hover:bg-red-50 text-slate-400 hover:text-red-600'
-                }`}
-              >
-                <RefreshCcw className="w-3 h-3" /> Purge Memory
-              </button>
-            )}
-          </div>
-            </motion.aside>
-          )}
-        </AnimatePresence>
-
-        {/* Workspace Area */}
+        {/* Main Content */}
         <div className={`flex-1 flex flex-col min-w-0 ${theme === 'dark' ? 'bg-black/10' : 'bg-slate-100/50'}`}>
             <nav className={`border-b ${theme === 'dark' ? 'border-zinc-900 bg-zinc-950/50' : 'border-slate-200 bg-white/50'} p-2 flex-shrink-0`}>
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -656,6 +493,7 @@ export default function App() {
                   <button 
                     onClick={() => runTests(selectedFilter)}
                     disabled={isRunning}
+                    title={`Run all ${selectedFilter} test fixtures`}
                     className={`
                       flex items-center gap-2 px-3 py-1 rounded text-[9px] font-black uppercase tracking-widest transition-all shadow-lg 
                       ${isRunning 
@@ -673,6 +511,7 @@ export default function App() {
                   <button 
                     onClick={runFailedTests}
                     disabled={isRunning}
+                    title="Re-run failed tests"
                     className={`
                       flex items-center gap-2 px-3 py-1 rounded text-[9px] font-black uppercase tracking-widest transition-all shadow-lg border
                       ${isRunning 
@@ -682,26 +521,123 @@ export default function App() {
                     `}
                   >
                     <AlertCircle className="w-3 h-3" />
-                    {isRunning ? "Refining..." : "Run Failed"}
+                    {isRunning ? "Running..." : "Run Failed"}
                   </button>
                 )}
 
                 <div className="h-4 w-px bg-zinc-800 mx-2" />
 
                 <button
-                  onClick={() => setShowEditor(!showEditor)}
+                  onClick={() => { setShowFreeTest(!showFreeTest); if (!showFreeTest) setShowEditor(false); }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-tight transition-all border whitespace-nowrap ${
+                    showFreeTest 
+                      ? (theme === 'dark' ? "bg-purple-500/10 border-purple-500/30 text-purple-400" : "bg-purple-100 border-purple-500/30 text-purple-600")
+                      : (theme === 'dark' ? "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900" : "border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-200")
+                  }`}
+                  title="Test any prompt against a model"
+                >
+                  <Terminal className="w-3.5 h-3.5" /> {showFreeTest ? "Exit Prompt Test" : "Prompt Test"}
+                </button>
+
+                <button
+                  onClick={() => { setShowEditor(!showEditor); if (!showEditor) setShowFreeTest(false); }}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-tight transition-all border whitespace-nowrap ${
                     showEditor 
                       ? (theme === 'dark' ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-emerald-100 border-emerald-500/30 text-emerald-600")
                       : (theme === 'dark' ? "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900" : "border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-200")
                   }`}
+                  title="Test prompts with custom context and overrides"
                 >
-                  <FlaskConical className="w-3.5 h-3.5" /> {showEditor ? "Exit Lab" : "Engineering Lab"}
+                  <FlaskConical className="w-3.5 h-3.5" /> {showEditor ? "Exit Lab" : "Adaptive Learning Lab"}
                 </button>
               </div>
             </nav>
 
           <div className="flex-1 flex min-h-0 overflow-hidden">
+            {showFreeTest && (
+              <div className={`w-[450px] border-r ${theme === 'dark' ? 'border-zinc-900 bg-zinc-950' : 'border-slate-200 bg-white'} flex flex-col flex-shrink-0`}>
+                <div className={`p-4 border-b ${theme === 'dark' ? 'border-zinc-900 bg-zinc-900/30' : 'border-slate-200 bg-slate-50'} flex items-center justify-between`}>
+                  <div className={`text-[10px] font-black uppercase tracking-widest ${theme === 'dark' ? 'text-purple-400' : 'text-purple-600'} flex items-center gap-2`}>
+                    <Terminal className="w-3.5 h-3.5" /> Prompt Test
+                  </div>
+                  <select 
+                    value={freeTestModel}
+                    onChange={(e) => setFreeTestModel(e.target.value)}
+                    className={`border rounded px-3 py-1 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-purple-500 ${
+                      theme === 'dark' 
+                        ? 'bg-zinc-900 border-zinc-800 text-zinc-300' 
+                        : 'bg-white border-slate-200 text-slate-700'
+                    }`}
+                    disabled={freeTestRunning}
+                  >
+                    <optgroup label="Anthropic">
+                      <option value="claude-3-5-sonnet-20240620">claude-3-5-sonnet (Old)</option>
+                      <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet (New)</option>
+                      <option value="claude-3-haiku-20240307">claude-3-haiku</option>
+                    </optgroup>
+                    <optgroup label="OpenAI">
+                      <option value="gpt-4o-mini">gpt-4o-mini</option>
+                      <option value="gpt-4o">gpt-4o</option>
+                      <option value="o1-preview">o1-preview</option>
+                      <option value="o1-mini">o1-mini</option>
+                    </optgroup>
+                  </select>
+                </div>
+
+                <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
+                  <div className="flex flex-col gap-1.5">
+                    <label className={`text-[9px] font-bold ${theme === 'dark' ? 'text-zinc-600' : 'text-slate-400'} uppercase`}>System Prompt</label>
+                    <textarea 
+                      value={freeTestPrompt}
+                      onChange={(e) => setFreeTestPrompt(e.target.value)}
+                      placeholder="Enter your system prompt here..."
+                      spellCheck={false}
+                      rows={8}
+                      className={`w-full ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800 text-purple-300 placeholder:text-zinc-700' : 'bg-slate-50 border-slate-200 text-purple-700 placeholder:text-slate-300'} border rounded p-3 font-mono text-[10px] focus:outline-none focus:ring-1 focus:ring-purple-500/30 resize-y`}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className={`text-[9px] font-bold ${theme === 'dark' ? 'text-zinc-600' : 'text-slate-400'} uppercase`}>User Context / Input <span className="opacity-50">(optional)</span></label>
+                    <textarea 
+                      value={freeTestContext}
+                      onChange={(e) => setFreeTestContext(e.target.value)}
+                      placeholder="Enter context or user message..."
+                      spellCheck={false}
+                      rows={5}
+                      className={`w-full ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800 text-emerald-300 placeholder:text-zinc-700' : 'bg-slate-50 border-slate-200 text-emerald-700 placeholder:text-slate-300'} border rounded p-3 font-mono text-[10px] focus:outline-none focus:ring-1 focus:ring-emerald-500/30 resize-y`}
+                    />
+                  </div>
+
+                  <button 
+                    onClick={runFreeTest}
+                    disabled={freeTestRunning || !freeTestPrompt.trim()}
+                    title="Send prompt to model"
+                    className={`
+                      w-full py-2.5 rounded text-[10px] font-black uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2
+                      ${freeTestRunning || !freeTestPrompt.trim()
+                        ? (theme === 'dark' ? "bg-zinc-800 text-zinc-600 cursor-not-allowed shadow-none" : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none")
+                        : "bg-purple-600 hover:bg-purple-500 text-white shadow-purple-500/20 active:scale-95"
+                      }
+                    `}
+                  >
+                    {freeTestRunning ? <RefreshCcw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                    {freeTestRunning ? "Running..." : "Run"}
+                  </button>
+
+                  {freeTestError && (
+                    <div className={`p-3 rounded border ${theme === 'dark' ? 'bg-red-500/5 border-red-500/20 text-red-400' : 'bg-red-50 border-red-200 text-red-600'} text-[10px] font-mono`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <AlertCircle className="w-3 h-3" />
+                        <span className="font-bold uppercase">Error</span>
+                      </div>
+                      {freeTestError}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {showEditor && (
               <div className={`w-[450px] border-r ${theme === 'dark' ? 'border-zinc-900 bg-zinc-950' : 'border-slate-200 bg-white'} flex flex-col flex-shrink-0`}>
                 <div className={`p-4 border-b ${theme === 'dark' ? 'border-zinc-900 bg-zinc-900/30' : 'border-slate-200 bg-slate-50'} flex items-center justify-between`}>
@@ -769,7 +705,7 @@ export default function App() {
                         }
                       `}
                     >
-                      {isRunning ? "Executing..." : "Process Lab Payload"}
+                      {isRunning ? "Running..." : "Run"}
                     </button>
                     <div className="flex-1 flex flex-col min-h-0 relative">
                       <label className={`text-[9px] font-bold ${theme === 'dark' ? 'text-zinc-600' : 'text-slate-400'} uppercase mb-1.5 flex justify-between items-center`}>
@@ -825,7 +761,7 @@ export default function App() {
                                   className={`p-1.5 transition-colors ${
                                     theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200' : 'hover:bg-white text-slate-400 hover:text-slate-700'
                                   }`}
-                                  title="View full screen"
+                                  title="Full screen"
                                 >
                                   <Maximize2 className="w-3 h-3" />
                                 </button>
@@ -841,7 +777,7 @@ export default function App() {
                                   className={`p-1.5 transition-colors ${
                                     theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200' : 'hover:bg-white text-slate-400 hover:text-slate-700'
                                   }`}
-                                  title="Copy content"
+                                  title="Copy"
                                 >
                                   <Copy className="w-3 h-3" />
                                 </button>
@@ -898,7 +834,7 @@ export default function App() {
                             }
                           `}
                         >
-                          {isRunning ? "Bench..." : "Benchmark Overrides"}
+                          {isRunning ? "Running..." : "Run with Overrides"}
                         </button>
                     </div>
 
@@ -1063,7 +999,7 @@ export default function App() {
                   </div>
                 )}
 
-                {!results && !error && !isRunning && (
+                {!results && !error && !isRunning && !showFreeTest && (
                   <div className="h-[60vh] flex flex-col items-center justify-center text-center">
                     <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 ${theme === 'dark' ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-slate-200 shadow-sm'}`}>
                       <Activity className={`w-8 h-8 ${theme === 'dark' ? 'text-indigo-500' : 'text-indigo-600'}`} />
@@ -1099,6 +1035,178 @@ export default function App() {
                       <Play className="w-3.5 h-3.5" />
                       Run All Tests
                     </button>
+                  </div>
+                )}
+
+                {showFreeTest && (
+                  <div className="w-full space-y-6">
+                    {freeTestRunning && !freeTestMainResult && (
+                      <div className="h-[40vh] flex flex-col items-center justify-center">
+                        <RefreshCcw className={`w-8 h-8 animate-spin ${theme === 'dark' ? 'text-purple-500' : 'text-purple-600'} mb-4`} />
+                        <div className={`text-[11px] font-bold uppercase tracking-widest ${theme === 'dark' ? 'text-zinc-500' : 'text-slate-400'}`}>
+                          Running...
+                        </div>
+                      </div>
+                    )}
+
+                    {!freeTestMainResult && !freeTestRunning && !freeTestError && (
+                      <div className="h-[60vh] flex flex-col items-start justify-center">
+                        <h3 className={`font-bold uppercase tracking-widest text-xs mb-2 ${theme === 'dark' ? 'text-zinc-400' : 'text-slate-600'}`}>Prompt Test Mode</h3>
+                        <p className={`text-[11px] max-w-sm leading-relaxed ${theme === 'dark' ? 'text-zinc-600' : 'text-slate-400'}`}>
+                          Enter a system prompt and optional context in the left panel, then click Execute to see the model response here.
+                        </p>
+                      </div>
+                    )}
+
+                    {freeTestError && !freeTestMainResult && (
+                      <div className={`p-6 rounded-xl border ${theme === 'dark' ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-200'}`}>
+                        <div className="flex items-center gap-3 text-red-500 mb-4 font-bold text-xs">
+                          <AlertCircle className="w-4 h-4" /> PROMPT_TEST_ERROR
+                        </div>
+                        <pre className={`text-xs whitespace-pre-wrap leading-relaxed ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`}>{freeTestError}</pre>
+                      </div>
+                    )}
+
+                    {freeTestMainResult && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="space-y-4"
+                      >
+                        {/* Stats bar */}
+                        <div className={`rounded-xl border overflow-hidden ${
+                          theme === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'
+                        }`}>
+                          <div className={`h-1.5 w-full ${theme === 'dark' ? 'bg-zinc-800' : 'bg-slate-100'}`}>
+                            <div className="h-full bg-purple-500 w-full" />
+                          </div>
+                          <div className="grid grid-cols-4 gap-4 p-4">
+                            <div className="space-y-1">
+                              <div className="text-[9px] uppercase tracking-widest text-zinc-500 font-bold">Model</div>
+                              <div className={`text-sm font-black ${theme === 'dark' ? 'text-white' : 'text-slate-900'} truncate`}>{freeTestMainResult.model}</div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-[9px] uppercase tracking-widest text-zinc-500 font-bold">Latency</div>
+                              <div className={`text-xl font-black ${theme === 'dark' ? 'text-zinc-300' : 'text-slate-700'}`}>{freeTestMainResult.duration}ms</div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-[9px] uppercase tracking-widest text-zinc-500 font-bold">Tokens</div>
+                              <div className="text-xl font-black text-purple-500">{freeTestMainResult.usage.total_tokens}</div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-[9px] uppercase tracking-widest text-zinc-500 font-bold">Cost</div>
+                              <div className="text-xl font-black text-amber-500">${freeTestMainResult.usage.cost.toFixed(5)}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Response */}
+                        <div className={`rounded-xl border overflow-hidden ${
+                          theme === 'dark' ? 'bg-zinc-900/30 border-zinc-800' : 'bg-white border-slate-200 shadow-sm'
+                        }`}>
+                          <div className={`px-6 py-3 border-b ${theme === 'dark' ? 'border-zinc-800 bg-zinc-900/50' : 'border-slate-100 bg-slate-50'} flex items-center justify-between`}>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setFreeTestViewTab("output")}
+                                className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded transition-all ${
+                                  freeTestViewTab === "output"
+                                    ? (theme === 'dark' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600')
+                                    : (theme === 'dark' ? 'text-zinc-600 hover:text-zinc-400' : 'text-slate-400 hover:text-slate-600')
+                                }`}
+                              >
+                                Output
+                              </button>
+                              <button
+                                onClick={() => setFreeTestViewTab("prompt")}
+                                className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded transition-all ${
+                                  freeTestViewTab === "prompt"
+                                    ? (theme === 'dark' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600')
+                                    : (theme === 'dark' ? 'text-zinc-600 hover:text-zinc-400' : 'text-slate-400 hover:text-slate-600')
+                                }`}
+                              >
+                                Prompt
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {freeTestViewTab === "prompt" && (
+                                <button 
+                                  onClick={() => setFreeTestPromptExpanded(!freeTestPromptExpanded)}
+                                  className={`flex items-center gap-1 px-2 py-1 rounded border text-[9px] font-black uppercase transition-all ${
+                                    freeTestPromptExpanded
+                                      ? (theme === 'dark' ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-400' : 'bg-indigo-100 border-indigo-200 text-indigo-700')
+                                      : (theme === 'dark' ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-700')
+                                  }`}
+                                >
+                                  {freeTestPromptExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                  {freeTestPromptExpanded ? 'Collapse' : 'Expand'}
+                                </button>
+                              )}
+                              <button 
+                                onClick={() => setMaximizedResult('prompt-test')}
+                                className={`p-1.5 rounded transition-colors ${theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700'}`}
+                                title="Full screen"
+                              >
+                                <Maximize2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  const content = freeTestViewTab === "prompt" 
+                                    ? `System Prompt:\n${freeTestPrompt}${freeTestContext ? `\n\nUser Context:\n${freeTestContext}` : ''}`
+                                    : freeTestMainResult.output;
+                                  navigator.clipboard.writeText(content);
+                                  addLog(`Prompt test ${freeTestViewTab} copied.`);
+                                }}
+                                className={`p-1.5 rounded transition-colors ${theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700'}`}
+                                title={freeTestViewTab === "prompt" ? "Copy prompt" : "Copy output"}
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className={`p-6 ${theme === 'dark' ? 'bg-[#0a0a0b]' : 'bg-slate-50'} min-h-[300px] max-h-[60vh] overflow-y-auto custom-scrollbar-mini`}>
+                            {freeTestViewTab === "output" ? (
+                              <div 
+                                className={`font-serif text-[13px] leading-[1.8] ${
+                                  theme === 'dark' ? 'text-zinc-300' : 'text-slate-800'
+                                } ${/[א-ת]/.test(freeTestMainResult.output) ? 'rtl text-right space-y-4 pr-1' : 'space-y-4'}`}
+                                dir={/[א-ת]/.test(freeTestMainResult.output) ? 'rtl' : 'ltr'}
+                              >
+                                {freeTestMainResult.output.split('\n').map((line, idx) => line.trim() ? (
+                                  <p key={idx} className="whitespace-pre-wrap">{line}</p>
+                                ) : <br key={idx} />)}
+                              </div>
+                            ) : (
+                              <div className="space-y-4 font-mono text-[10px]">
+                                <div className="space-y-2">
+                                  <div className="text-indigo-500 font-bold uppercase tracking-widest text-[9px] flex items-center gap-2">
+                                    <div className="w-4 h-[1px] bg-indigo-500/30" /> System Prompt
+                                  </div>
+                                  <div className={`${theme === 'dark' ? 'text-zinc-400 bg-black/20 border-zinc-800' : 'text-slate-600 bg-white border-slate-200'} p-4 rounded border whitespace-pre-wrap leading-relaxed ${!freeTestPromptExpanded ? 'max-h-[200px] overflow-hidden relative' : ''}`}>
+                                    {freeTestPrompt}
+                                    {!freeTestPromptExpanded && freeTestPrompt.length > 300 && (
+                                      <div className={`absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t ${theme === 'dark' ? 'from-[#0a0a0b]' : 'from-slate-50'} to-transparent`} />
+                                    )}
+                                  </div>
+                                </div>
+                                {freeTestContext && (
+                                  <div className="space-y-2">
+                                    <div className="text-emerald-500 font-bold uppercase tracking-widest text-[9px] flex items-center gap-2">
+                                      <div className="w-4 h-[1px] bg-emerald-500/30" /> User Context
+                                    </div>
+                                    <div className={`${theme === 'dark' ? 'text-emerald-400/80 bg-emerald-500/5 border-emerald-500/10' : 'text-emerald-700 bg-emerald-50 border-emerald-200'} p-4 rounded border whitespace-pre-wrap leading-relaxed ${!freeTestPromptExpanded ? 'max-h-[200px] overflow-hidden relative' : ''}`}>
+                                      {freeTestContext}
+                                      {!freeTestPromptExpanded && freeTestContext.length > 300 && (
+                                        <div className={`absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t ${theme === 'dark' ? 'from-[#0a0a0b]' : 'from-slate-50'} to-transparent`} />
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
                   </div>
                 )}
 
@@ -1239,24 +1347,6 @@ export default function App() {
                                   </div>
 
                                   <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                                    <button
-                                      onClick={() => {
-                                        setCustomContext(JSON.stringify(test.context, null, 2));
-                                        setContextType(test.fixture_id.startsWith('SIM') ? 'simulation' : test.fixture_id.startsWith('ADP') ? 'adaptive' : 'deep_learning');
-                                        setShowEditor(true);
-                                        setEditorTab("context");
-                                        addLog(`Loaded ${test.fixture_id} into Lab.`);
-                                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                                      }}
-                                      className={`flex items-center gap-2 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border transition-all h-8 ${
-                                        theme === 'dark' 
-                                          ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20' 
-                                          : 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100'
-                                      }`}
-                                    >
-                                      <FlaskConical className="w-3 h-3" /> Load into Lab
-                                    </button>
-
                                     <div className={`flex items-center border rounded-lg overflow-hidden h-8 ${
                                       theme === 'dark' ? 'border-zinc-800 bg-zinc-950/50' : 'border-slate-200 bg-slate-50'
                                     }`}>
@@ -1265,7 +1355,7 @@ export default function App() {
                                         className={`p-2 transition-colors ${
                                           theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200' : 'hover:bg-white text-slate-400 hover:text-slate-700'
                                         }`}
-                                        title="View full screen"
+                                        title="Full screen"
                                       >
                                         <Maximize2 className="w-3.5 h-3.5" />
                                       </button>
@@ -1277,7 +1367,7 @@ export default function App() {
                                             className={`p-2 transition-colors ${
                                               theme === 'dark' ? 'hover:bg-red-500/10 text-red-500 hover:text-red-400' : 'hover:bg-red-50 text-red-600 hover:text-red-700'
                                             } group relative`}
-                                            title="Copy failure diagnosis"
+                                            title="Copy diagnosis"
                                           >
                                             <Terminal className="w-3.5 h-3.5" />
                                             <span className={`absolute bottom-full right-0 mb-2 hidden group-hover:block ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-white border-slate-200 text-slate-900'} border text-[9px] px-2 py-1 rounded whitespace-nowrap z-10 shadow-2xl`}>
@@ -1297,7 +1387,7 @@ export default function App() {
                                         className={`p-2 transition-colors min-w-[36px] flex items-center justify-center ${
                                           theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200' : 'hover:bg-white text-slate-400 hover:text-slate-700'
                                         }`}
-                                        title="Copy raw response"
+                                        title="Copy response"
                                       >
                                         {copiedId === test.fixture_id ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                                       </button>
@@ -1352,7 +1442,7 @@ export default function App() {
                                                   ? (theme === 'dark' ? 'bg-green-500/20 border-green-500/30 text-green-400' : 'bg-green-100 border-green-200 text-green-700')
                                                   : (theme === 'dark' ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-700')
                                               }`}
-                                              title="Copy full prompt"
+                                              title="Copy prompt"
                                             >
                                               <Copy className="w-3 h-3" />
                                               {copiedId === `prompt-${test.fixture_id}` ? 'COPIED' : 'COPY PROMPT'}
@@ -1543,7 +1633,7 @@ export default function App() {
                 <div className="flex items-center gap-3">
                   <Maximize2 className="text-indigo-400 w-5 h-5" />
                   <div>
-                    <h3 className="font-bold text-white uppercase tracking-wider text-sm">Full Diagnostic Stream</h3>
+                    <h3 className="font-bold text-white uppercase tracking-wider text-sm">Full Response</h3>
                     <div className="text-[10px] text-zinc-500">ID: {maximizedResult}</div>
                   </div>
                 </div>
@@ -1557,31 +1647,14 @@ export default function App() {
               <div className={`flex-1 overflow-y-auto p-8 lg:p-20 ${theme === 'dark' ? 'bg-black/40' : 'bg-slate-950'} custom-scrollbar`}>
                 <div className="max-w-3xl mx-auto space-y-8">
                   <div className={`${theme === 'dark' ? 'text-zinc-100' : 'text-indigo-100'} text-lg lg:text-2xl leading-relaxed font-sans selection:bg-indigo-500/40 whitespace-pre-wrap tracking-tight`}>
-                    {results?.find(r => r.fixture_id === maximizedResult)?.output}
+                    {maximizedResult === 'prompt-test' ? freeTestMainResult?.output : results?.find(r => r.fixture_id === maximizedResult)?.output}
                   </div>
-                  {results?.find(r => r.fixture_id === maximizedResult)?.error && (
+                  {maximizedResult !== 'prompt-test' && results?.find(r => r.fixture_id === maximizedResult)?.error && (
                     <div className={`p-8 rounded-xl text-sm font-mono ${theme === 'dark' ? 'bg-red-500/10 border border-red-500/20 text-red-400' : 'bg-red-900 border border-red-800 text-red-200'}`}>
                       {results.find(r => r.fixture_id === maximizedResult)?.error}
                     </div>
                   )}
                 </div>
-              </div>
-              <div className={`border-t ${theme === 'dark' ? 'border-zinc-800 bg-zinc-950/20 text-zinc-600' : 'border-slate-800 bg-slate-900 text-slate-500'} p-6 flex justify-between items-center`}>
-                <div className="text-[10px]">PRESS CLICK OUTSIDE OR "X" TO ABORT VIEW</div>
-                <button 
-                  onClick={() => {
-                    const content = results?.find(r => r.fixture_id === maximizedResult)?.output;
-                    if (content) navigator.clipboard.writeText(content);
-                    addLog(`Copied full stream for ${maximizedResult}`);
-                  }}
-                  className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-xs font-black uppercase tracking-widest transition-all active:scale-95 ${
-                    theme === 'dark'
-                      ? 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700'
-                      : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
-                  }`}
-                >
-                  <Copy className="w-4 h-4" /> Copy Entire Stream
-                </button>
               </div>
             </motion.div>
           </motion.div>
@@ -1677,6 +1750,39 @@ export default function App() {
                         : 'הערה: כל הרצות המעבדה מבודדות לסשן הנוכחי. רענון הדפדפן ישחזר את הנחיות המערכת המקוריות, אך מפתחות ה-API נשמרים בדפדפן.'
                       }
                     </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h5 className="text-[10px] font-black uppercase tracking-widest text-purple-500/80">
+                      {guideLang === 'en' ? 'Prompt Test Mode' : 'מצב בדיקת פרומפט'}
+                    </h5>
+                    <p className={`text-xs leading-relaxed ${theme === 'dark' ? 'text-zinc-400' : 'text-slate-600'}`}>
+                      {guideLang === 'en'
+                        ? 'The Prompt Test tab lets you quickly test any system prompt against any model without fixtures or rules. Perfect for rapid iteration on prompt wording.'
+                        : 'לשונית בדיקת הפרומפט מאפשרת לבדוק כל הנחיית מערכת מול כל מודל ללא תבניות או כללים. מושלם לאיטרציה מהירה על ניסוח הנחיות.'
+                      }
+                    </p>
+                    <ul className="space-y-2">
+                      {[
+                        guideLang === 'en'
+                          ? 'Enter a system prompt (the instructions the model follows) in the left panel.'
+                          : 'הזינו הנחיית מערכת (ההוראות שהמודל עוקב אחריהן) בפאנל השמאלי.',
+                        guideLang === 'en'
+                          ? 'Optionally add user context (simulates what the user sends to the model).'
+                          : 'אופציונלית הוסיפו הקשר משתמש (מדמה את מה שהמשתמש שולח למודל).',
+                        guideLang === 'en'
+                          ? 'Select a model from the dropdown and click Execute. Results appear in the main area.'
+                          : 'בחרו מודל מהתפריט ולחצו Execute. התוצאות מופיעות באזור הראשי.',
+                        guideLang === 'en'
+                          ? 'Toggle between Output and Prompt tabs in the result to review what was sent vs received.'
+                          : 'עברו בין לשוניות Output ו-Prompt בתוצאה כדי לבדוק מה נשלח מול מה שהתקבל.'
+                      ].map((step, i) => (
+                        <li key={i} className={`flex gap-3 text-[11px] ${theme === 'dark' ? 'text-zinc-400' : 'text-slate-600'}`}>
+                          <span className="text-purple-500 font-mono shrink-0">{i + 1}.</span>
+                          <span>{step}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 </div>
               </div>

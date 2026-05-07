@@ -171,6 +171,115 @@ async function startServer() {
     });
   });
 
+  app.post("/api/free-test", async (req, res) => {
+    const { prompt, context, model: reqModel } = req.body;
+    
+    if (!prompt) {
+      return res.status(400).json({ error: "Prompt is required" });
+    }
+
+    const startTime = Date.now();
+    
+    try {
+      // Determine which API to call based on model
+      const selectedModel = reqModel || "gpt-4o";
+      let output = "";
+      let usage = { input_tokens: 0, output_tokens: 0, total_tokens: 0, cost: 0 };
+
+      if (selectedModel.startsWith("claude")) {
+        // Anthropic
+        const apiKey = process.env.ANTHROPIC_API_KEY || req.body.anthropicKey;
+        if (!apiKey) {
+          return res.status(400).json({ error: "Anthropic API key not configured" });
+        }
+
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01"
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            max_tokens: 4096,
+            system: prompt,
+            messages: [{ role: "user", content: context || "Please respond based on the system prompt." }]
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error?.message || "Anthropic API error");
+        }
+
+        output = data.content?.[0]?.text || "";
+        const inputTokens = data.usage?.input_tokens || 0;
+        const outputTokens = data.usage?.output_tokens || 0;
+        usage = {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          total_tokens: inputTokens + outputTokens,
+          cost: (inputTokens * 0.003 + outputTokens * 0.015) / 1000
+        };
+      } else {
+        // OpenAI
+        const apiKey = process.env.OPENAI_API_KEY || req.body.openaiKey;
+        if (!apiKey) {
+          return res.status(400).json({ error: "OpenAI API key not configured" });
+        }
+
+        const messages: any[] = [
+          { role: "system", content: prompt }
+        ];
+        if (context) {
+          messages.push({ role: "user", content: context });
+        } else {
+          messages.push({ role: "user", content: "Please respond based on the system prompt." });
+        }
+
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            messages,
+            max_tokens: 4096
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error?.message || "OpenAI API error");
+        }
+
+        output = data.choices?.[0]?.message?.content || "";
+        const inputTokens = data.usage?.prompt_tokens || 0;
+        const outputTokens = data.usage?.completion_tokens || 0;
+        usage = {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          total_tokens: inputTokens + outputTokens,
+          cost: (inputTokens * 0.005 + outputTokens * 0.015) / 1000
+        };
+      }
+
+      const duration = Date.now() - startTime;
+      res.json({
+        output,
+        usage,
+        model: selectedModel,
+        duration
+      });
+    } catch (err: any) {
+      console.error("Free test error:", err);
+      res.status(500).json({ error: err.message || "Free test execution failed" });
+    }
+  });
+
   // In production, serve static files. In development, use vite dev server (run via tsx, not the bundle).
   if (process.env.NODE_ENV === "production") {
     const distPath = path.join(process.cwd(), 'dist');
