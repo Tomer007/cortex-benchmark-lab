@@ -171,20 +171,21 @@ async function startServer() {
     });
   });
 
-  // Vite middleware for development (dynamic import so production bundle doesn't require vite)
-  if (process.env.NODE_ENV !== "production") {
-    const { createServer: createViteServer } = await import("vite");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
+  // In production, serve static files. In development, use vite dev server (run via tsx, not the bundle).
+  if (process.env.NODE_ENV === "production") {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
+  } else {
+    // Dynamic import so the bundled production build never references vite
+    const { createServer: createViteServer } = await (Function('return import("vite")')() as Promise<typeof import("vite")>);
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
   }
 
   app.listen(PORT, "0.0.0.0", () => {
