@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import { createServer as createViteServer } from "vite";
+
 import path from "path";
 import { spawn } from "child_process";
 import fs from "fs";
@@ -171,8 +171,9 @@ async function startServer() {
     });
   });
 
-  // Vite middleware for development
+  // Vite middleware for development (dynamic import so production bundle doesn't require vite)
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
