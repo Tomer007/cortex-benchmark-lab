@@ -1,0 +1,25 @@
+{
+  "context_type": "simulation_report",
+  "language": "He",
+  "score": 129,
+  "percentile": 80,
+  "target_score": 135,
+  "focus_categories": [
+    "Assumptions"
+  ],
+  "simulation_type": "full",
+  "explanations_available": true,
+  "next_session": {
+    "type": "adaptive_learning",
+    "category": "Assumptions"
+  },
+  "progress_data": [
+    118,
+    123,
+    129
+  ],
+  "exam_ai_description": "The Watson-Glaser Critical Thinking Appraisal measures the ability to analyze arguments, evaluate assumptions, and draw logical conclusions.",
+  "category_ai_descriptions": {
+    "Assumptions": "Tests the ability to identify unstated assumptions that underlie an argument or conclusion."
+  }
+}

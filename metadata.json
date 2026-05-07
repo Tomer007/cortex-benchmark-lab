@@ -1,0 +1,6 @@
+{
+  "name": "Cortex Benchmark Lab",
+  "description": "A testing dashboard for the AI Coaching Prompt System, running comprehensive test suites and visualizing pass/fail metrics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
