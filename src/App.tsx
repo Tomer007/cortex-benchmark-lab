@@ -60,7 +60,7 @@ export default function App() {
   const [metadata, setMetadata] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [model, setModel] = useState("gpt-4o");
+  const [model, setModel] = useState("gpt-4o-mini");
   const [selectedFilter, setSelectedFilter] = useState<string | null>(null);
   const [customContext, setCustomContext] = useState<string>(() => {
     return localStorage.getItem('bench_custom_json') || JSON.stringify({
@@ -346,7 +346,7 @@ export default function App() {
     setFreeTestError(null);
     setFreeTestResult(null);
     setFreeTestMainResult(null);
-    addLog(`Prompt test: ${freeTestModel}`);
+    addLog(`Prompt test: ${model}`);
 
     try {
       const response = await fetch("/api/free-test", {
@@ -355,7 +355,7 @@ export default function App() {
         body: JSON.stringify({
           prompt: freeTestPrompt,
           context: freeTestContext || undefined,
-          model: freeTestModel,
+          model: model,
           anthropicKey,
           openaiKey
         })
@@ -437,16 +437,13 @@ export default function App() {
               }`}
               disabled={isRunning}
             >
-              <optgroup label="Anthropic">
-                <option value="claude-3-5-sonnet-20240620">claude-3-5-sonnet (Old)</option>
-                <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet (New)</option>
-                <option value="claude-3-haiku-20240307">claude-3-haiku</option>
-              </optgroup>
               <optgroup label="OpenAI">
                 <option value="gpt-4o-mini">gpt-4o-mini</option>
                 <option value="gpt-4o">gpt-4o</option>
-                <option value="o1-preview">o1-preview</option>
-                <option value="o1-mini">o1-mini</option>
+              </optgroup>
+              <optgroup label="Anthropic">
+                <option value="claude-sonnet-4-20250514">claude-sonnet-4</option>
+                <option value="claude-3-5-sonnet-20241022">claude-3.5-sonnet</option>
               </optgroup>
             </select>
             
@@ -560,28 +557,6 @@ export default function App() {
                   <div className={`text-[10px] font-black uppercase tracking-widest ${theme === 'dark' ? 'text-purple-400' : 'text-purple-600'} flex items-center gap-2`}>
                     <Terminal className="w-3.5 h-3.5" /> Prompt Test
                   </div>
-                  <select 
-                    value={freeTestModel}
-                    onChange={(e) => setFreeTestModel(e.target.value)}
-                    className={`border rounded px-3 py-1 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-purple-500 ${
-                      theme === 'dark' 
-                        ? 'bg-zinc-900 border-zinc-800 text-zinc-300' 
-                        : 'bg-white border-slate-200 text-slate-700'
-                    }`}
-                    disabled={freeTestRunning}
-                  >
-                    <optgroup label="Anthropic">
-                      <option value="claude-3-5-sonnet-20240620">claude-3-5-sonnet (Old)</option>
-                      <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet (New)</option>
-                      <option value="claude-3-haiku-20240307">claude-3-haiku</option>
-                    </optgroup>
-                    <optgroup label="OpenAI">
-                      <option value="gpt-4o-mini">gpt-4o-mini</option>
-                      <option value="gpt-4o">gpt-4o</option>
-                      <option value="o1-preview">o1-preview</option>
-                      <option value="o1-mini">o1-mini</option>
-                    </optgroup>
-                  </select>
                 </div>
 
                 <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
